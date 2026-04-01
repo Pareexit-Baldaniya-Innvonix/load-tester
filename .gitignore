@@ -1,0 +1,27 @@
+# Editor config
+.vscode
+
+# Cache settings
+__pycache__
+*.pyc
+
+# Logs
+logs
+
+# Local dockercompose file
+docker-compose-files
+
+# data and backup files
+data/
+*.db
+
+# Reports and test results
+reports/
+*.html
+*.csv
+
+# Env files
+.env
+
+# Docker compose file
+docker-compose.yml
