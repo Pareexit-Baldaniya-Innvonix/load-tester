@@ -8,47 +8,58 @@ Can be used as:
 """
 
 import os
+
+os.environ.setdefault("LOCUST_SKIP_MONKEY_PATCH", "1")
+
 import time
 from pathlib import Path
 from urllib.parse import urlparse
-from locust import HttpUser, task, between
-from locust.env import Environment
 
 
-class APIUser(HttpUser):
-    """User class that simulates API requests to the target URL."""
+def safe_float(value, default=0.0):
+    """Return float value or default if None."""
+    return value if value is not None else default
 
-    wait_time = between(0.5, 2.0)  # Random wait between requests
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.target_path = getattr(self.environment, "target_path", "/")
+def get_api_user_class(HttpUser, task, between):
+    """Helper to define the APIUser class dynamically."""
 
-    @task
-    def get_request(self):
-        """Make a GET request to the target endpoint."""
-        with self.client.get(self.target_path, catch_response=True) as response:
-            if response.status_code == 200:
-                response.success()
-            else:
-                response.failure(f"Got status code {response.status_code}")
+    class APIUser(HttpUser):
+        """User class that simulates API requests to the target URL."""
+
+        wait_time = between(0.5, 2.0)
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.target_path = getattr(self.environment, "target_path", "/")
+
+        @task
+        def get_request(self):
+            """Make a GET request to the target endpoint."""
+            with self.client.get(self.target_path, catch_response=True) as response:
+                if response.status_code == 200:
+                    response.success()
+                else:
+                    response.failure(f"Got status code {response.status_code}")
+
+    return APIUser
 
 
 def export_csv(stats, filename):
     """Export statistics to CSV format."""
     with open(filename, "w") as f:
         # Write header
-        f.write("Type,Name,Requests,Failures,Median,Average,Min,Max,Content-Type\n")
+        f.write("Type,Name,Requests,Failures,Median,Average,Min,Max,Content-Size\n")
 
         # Write overall stats
         total = stats.total
         f.write(
             f"Total,,{total.num_requests},"
             f"{total.num_failures},"
-            f"{total.get_response_time_percentile(0.5):.2f},"
-            f"{total.avg_response_time:.2f},"
-            f"{total.min_response_time:.2f},"
-            f"{total.max_response_time:.2f},\n"
+            f"{safe_float(total.get_response_time_percentile(0.5)):.2f},"
+            f"{safe_float(total.avg_response_time):.2f},"
+            f"{safe_float(total.min_response_time):.2f},"
+            f"{safe_float(total.max_response_time):.2f},\n"
         )
 
         # Write per-endpoint stats
@@ -73,10 +84,10 @@ def create_html_report(env, filename, url, duration, num_users, ramp_rate):
     # Calculate summary statistics
     total_requests = stats.total.num_requests
     total_failures = stats.total.num_failures
-    avg_response_time = stats.total.avg_response_time
-    median_response_time = stats.total.get_response_time_percentile(0.5)
-    p95_response_time = stats.total.get_response_time_percentile(0.95)
-    p99_response_time = stats.total.get_response_time_percentile(0.99)
+    avg_response_time = safe_float(stats.total.avg_response_time)
+    median_response_time = safe_float(stats.total.get_response_time_percentile(0.5))
+    p95_response_time = safe_float(stats.total.get_response_time_percentile(0.95))
+    p99_response_time = safe_float(stats.total.get_response_time_percentile(0.99))
 
     success_rate = (
         ((total_requests - total_failures) / total_requests * 100)
@@ -382,10 +393,10 @@ def create_html_report(env, filename, url, duration, num_users, ramp_rate):
                             <td><strong>{name}</strong></td>
                             <td>{stat.num_requests}</td>
                             <td><span class="failure-badge">{stat.num_failures}</span></td>
-                            <td>{stat.avg_response_time:.2f}</td>
-                            <td>{stat.min_response_time:.2f}</td>
-                            <td>{stat.max_response_time:.2f}</td>
-                            <td>{stat.get_response_time_percentile(0.5):.2f}</td>
+                            <td>{safe_float(stat.avg_response_time):.2f}
+                            <td>{safe_float(stat.min_response_time):.2f}</td>
+                            <td>{safe_float(stat.max_response_time):.2f}</td>
+                            <td>{safe_float(stat.get_response_time_percentile(0.5)):.2f}</td>
                         </tr>
             """
 
@@ -472,6 +483,12 @@ def run_load_test(
 
     # Reconstruct base URL (host)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+    # Local import to avoid gevent monkey-patching on startup
+    from locust import HttpUser, task, between
+    from locust.env import Environment
+
+    APIUser = get_api_user_class(HttpUser, task, between)
 
     # Create a minimal options object
     class MinimalOptions:
