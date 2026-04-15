@@ -4,6 +4,12 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+fastapi = {extras = ["standard"], version = "*"}
+uvicorn = "*"
+pydantic = "*"
+tortoise-orm = "*"
+asyncpg = "*"
+locust = "*"
 
 [dev-packages]
 
