@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime
 
 # Local imports
 from .loaders.app_lifespan import app_lifespan
@@ -120,7 +120,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
     # Store test info
     test_results[test_id] = {
         "status": "running",
-        "request": request.model_dump(),
+        "request": request.dict(),
         "results": None,
     }
 
@@ -136,7 +136,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
                 num_users=request.num_users,
                 ramp_rate=request.ramp_rate,
                 status="running",
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.utcnow,
             )
 
             # Generate unique filenames based on test_id
@@ -177,7 +177,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
             db_test.p99_response_time = float(results["p99_response_time"])
             db_test.html_report = html_path
             db_test.csv_file = csv_path
-            db_test.completed_at = datetime.now(timezone.utc)
+            db_test.completed_at = datetime.utcnow
             await db_test.save()
 
         except Exception as e:
@@ -188,7 +188,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
             if db_test:
                 db_test.status = "failed"
                 db_test.error_message = str(e)
-                db_test.completed_at = datetime.now(timezone.utc)
+                db_test.completed_at = datetime.utcnow
                 await db_test.save()
             else:
                 # Create failed record if initial creation failed
@@ -201,7 +201,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
                         ramp_rate=request.ramp_rate,
                         status="failed",
                         error_message=str(e),
-                        created_at=datetime.now(timezone.utc),
+                        created_at=datetime.utcnow,
                     )
                 except Exception:
                     pass  # Silently fail if we can't create the record
