@@ -10,10 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Local imports
-from .load_testing import run_load_test
 from .loaders.app_lifespan import app_lifespan
 from .models import LoadTest, TestMetrics
 
@@ -121,7 +120,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
     # Store test info
     test_results[test_id] = {
         "status": "running",
-        "request": request.dict(),
+        "request": request.model_dump(),
         "results": None,
     }
 
@@ -137,13 +136,15 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
                 num_users=request.num_users,
                 ramp_rate=request.ramp_rate,
                 status="running",
-                started_at=datetime.utcnow(),
+                started_at=datetime.now(timezone.utc),
             )
 
             # Generate unique filenames based on test_id
             reports_dir = os.getenv("REPORTS_DIR", "./reports")
             unique_html_report = f"locust_report_{test_id}.html"
             unique_csv_prefix = f"locust_results_{test_id}"
+
+            from .load_testing import run_load_test
 
             results = run_load_test(
                 url=request.url,
@@ -176,7 +177,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
             db_test.p99_response_time = float(results["p99_response_time"])
             db_test.html_report = html_path
             db_test.csv_file = csv_path
-            db_test.completed_at = datetime.utcnow()
+            db_test.completed_at = datetime.now(timezone.utc)
             await db_test.save()
 
         except Exception as e:
@@ -187,7 +188,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
             if db_test:
                 db_test.status = "failed"
                 db_test.error_message = str(e)
-                db_test.completed_at = datetime.utcnow()
+                db_test.completed_at = datetime.now(timezone.utc)
                 await db_test.save()
             else:
                 # Create failed record if initial creation failed
@@ -200,7 +201,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
                         ramp_rate=request.ramp_rate,
                         status="failed",
                         error_message=str(e),
-                        created_at=datetime.utcnow(),
+                        created_at=datetime.now(timezone.utc),
                     )
                 except Exception:
                     pass  # Silently fail if we can't create the record
