@@ -11,10 +11,14 @@ import os
 import time
 from pathlib import Path
 from urllib.parse import urlparse
+
+
 def get_api_user_class(HttpUser, task, between):
     """Helper to define the APIUser class dynamically."""
+
     class APIUser(HttpUser):
         """User class that simulates API requests to the target URL."""
+
         wait_time = between(0.5, 2.0)
 
         def __init__(self, *args, **kwargs):
@@ -29,6 +33,7 @@ def get_api_user_class(HttpUser, task, between):
                     response.success()
                 else:
                     response.failure(f"Got status code {response.status_code}")
+
     return APIUser
 
 
@@ -470,13 +475,14 @@ def run_load_test(
 
     # Reconstruct base URL (host)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-    
+
     try:
         from gevent import monkey as _monkey
+
         if not _monkey.is_module_patched("socket"):
             _monkey.patch_all(ssl=False)
     except Exception:
-        pass 
+        pass
 
     # Local import to avoid gevent monkey-patching on startup
     from locust import HttpUser, task, between
@@ -620,4 +626,3 @@ def run_load_test(
             env.stats.clear_all()
         except:
             pass
- 
