@@ -341,7 +341,7 @@ def create_html_report(env, filename, url, duration, num_users, ramp_rate):
                     </div>
                     <div class="metric-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
                         <div class="metric-label">Avg Response Time</div>
-                        <div class="metric-value">{avg_response_time:.2f}<span class="metric-unit">ms</div></span>
+                        <div class="metric-value">{avg_response_time:.2f}<span class="metric-unit">ms</span></div>
                     </div>
                 </div>
 
@@ -384,7 +384,7 @@ def create_html_report(env, filename, url, duration, num_users, ramp_rate):
                         <tr>
                             <td><strong>{name}</strong></td>
                             <td>{stat.num_requests}</td>
-                            <td><span class="failure-badge">{stat.num_failures}</td></span>
+                            <td><span class="failure-badge">{stat.num_failures}</span></td>
                             <td>{stat.avg_response_time:.2f}</td>
                             <td>{stat.min_response_time:.2f}</td>
                             <td>{stat.max_response_time:.2f}</td>
