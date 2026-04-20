@@ -11,6 +11,7 @@ from pydantic import BaseModel
 import asyncio
 from typing import Optional
 from datetime import datetime
+import aiofiles
 
 # Local imports
 from .loaders.app_lifespan import app_lifespan
@@ -66,7 +67,8 @@ async def root():
     """Serve the web UI dashboard."""
     html_file = TEMPLATES_DIR / "index.html"
     if html_file.exists():
-        return html_file.read_text()
+        async with aiofiles.open(html_file, mode="r") as f:
+            return await f.read()
     return "<h1>Load Testing Dashboard</h1><p>UI file not found</p>"
 
 
@@ -260,17 +262,18 @@ async def get_test_results(test_id: str):
 async def download_report(test_id: str):
     """Download HTML report for a test."""
 
-    if test_id not in test_results:
-        raise HTTPException(status_code=404, detail="Test not found")
+    file_path = f"reports/locust_report_{test_id}.html"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Report not found")
 
-    test = test_results[test_id]
-
-    if test["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Test not completed yet")
-
-    # Use the stored file path or construct from test_id
-    html_file = test.get("html_file", f"locust_report_{test_id}.html")
-    return FileResponse(html_file, media_type="text/html", filename=html_file)
+    return FileResponse(
+        path=file_path,
+        filename=f"report_{test_id}.html",
+        media_type="text/html",
+        headers={
+            "Content-Length": str(os.path.getsize(file_path))
+        },  # Added for progress tracking
+    )
 
 
 @app.get("/load-test/{test_id}/csv")
@@ -285,21 +288,36 @@ async def download_csv(test_id: str):
     if test["status"] != "completed":
         raise HTTPException(status_code=400, detail="Test not completed yet")
 
-    # Use the stored file path or construct from test_id
+    # Use the exact path written by run_load_test
     csv_file = test.get("csv_file", f"locust_results_{test_id}_stats.csv")
-    return FileResponse(csv_file, media_type="text/csv", filename=csv_file)
+    if not Path(csv_file).exists():
+        raise HTTPException(
+            status_code=404, detail=f"CSV file not found on disk: {csv_file}"
+        )
+    filename_only = Path(csv_file).name
+    return FileResponse(
+        csv_file,
+        media_type="text/csv",
+        filename=filename_only,
+        headers={"Content-Disposition": f'attachment; filename="{filename_only}"'},
+    )
 
 
 @app.get("/tests")
 async def list_tests():
     """List all tests and their status."""
-
+    
     return {
         "tests": [
             {
                 "test_id": test_id,
                 "status": test["status"],
                 "url": test["request"]["url"],
+                "duration": test["request"].get("duration"),
+                "num_users": test["request"].get("num_users"),
+                "ramp_rate": test["request"].get("ramp_rate"),
+                "results": test.get("results"),
+                "error": test.get("error"),
             }
             for test_id, test in test_results.items()
         ],
