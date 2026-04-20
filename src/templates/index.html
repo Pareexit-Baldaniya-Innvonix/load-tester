@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load Testing Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .secondary-btn {
+            background: #f0f0f0;
+            color: #333;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        .secondary-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .results-card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .results-card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .test-item {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .test-item.completed {
+            border-left-color: #11998e;
+        }
+
+        .test-item.failed {
+            border-left-color: #f5576c;
+        }
+
+        .test-item.running {
+            border-left-color: #ffa502;
+        }
+
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .test-url {
+            font-weight: 600;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge.running {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .test-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .detail-item {
+            font-size: 0.9em;
+        }
+
+        .detail-label {
+            color: #999;
+            font-size: 0.85em;
+            text-transform: uppercase;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 600;
+            margin-top: 3px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .action-buttons button {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.9em;
+            margin: 0;
+            margin-top: 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .results-table thead {
+            background: #f5f5f5;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .results-table th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .results-table tbody tr {
+            border-bottom: 1px solid #e0e0e0;
+            transition: background 0.2s;
+        }
+
+        .results-table tbody tr:hover {
+            background: #f9f9f9;
+        }
+
+        .results-table td {
+            padding: 15px;
+            color: #555;
+        }
+
+        .results-table .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .results-table .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .results-table .status-running {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .results-table .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .results-table .metrics-compact {
+            font-size: 0.9em;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .results-table .action-cell {
+            text-align: center;
+        }
+
+        .results-table .action-cell button {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin: 0 3px;
+            background: #667eea;
+            width: auto;
+        }
+
+        .results-table .action-cell button:hover {
+            background: #764ba2;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #999;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+            width: auto;
+            margin: 0;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .test-details {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Load Testing Dashboard</h1>
+            <p>Professional Performance Testing Tool</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Form Card -->
+            <div class="card">
+                <h2>📊 Start New Test</h2>
+                <form id="testForm">
+                    <div class="form-group">
+                        <label for="url">Target URL *</label>
+                        <input type="text" id="url" name="url" placeholder="http://example.com" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="duration">Duration (seconds)</label>
+                            <input type="number" id="duration" name="duration" value="60" min="10" max="3600">
+                        </div>
+                        <div class="form-group">
+                            <label for="numUsers">Concurrent Users</label>
+                            <input type="number" id="numUsers" name="numUsers" value="100" min="1" max="10000">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="rampRate">Ramp Rate (users/sec)</label>
+                            <input type="number" id="rampRate" name="rampRate" value="10" min="0.1" max="1000"
+                                step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="reportName">Report Name</label>
+                            <input type="text" id="reportName" name="reportName" placeholder="report.html">
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submitBtn">Start Load Test</button>
+                </form>
+            </div>
+
+            <!-- Stats Card -->
+            <div class="card">
+                <h2>📈 Quick Stats</h2>
+                <div class="metrics-grid" id="statsGrid">
+                    <div class="metric">
+                        <div class="metric-label">Total Tests</div>
+                        <div class="metric-value" id="totalTests">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Running</div>
+                        <div class="metric-value" id="runningTests">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Completed</div>
+                        <div class="metric-value" id="completedTests">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Failed</div>
+                        <div class="metric-value" id="failedTests">0</div>
+                    </div>
+                </div>
+
+                <div id="currentTestInfo" style="display: none;">
+                    <h3 style="color: #333; margin-top: 20px; margin-bottom: 10px;">Current Test</h3>
+                    <div class="test-item running">
+                        <div class="test-url" id="currentUrl"></div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressBar" style="width: 0%;"></div>
+                        </div>
+                        <div class="detail-item" style="margin-top: 10px;">
+                            <div class="detail-label">Elapsed Time</div>
+                            <div class="detail-value"><span class="spinner"></span><span id="elapsed">0s</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Card -->
+        <div class="results-card">
+            <h2>📋 Test History</h2>
+
+            <div class="tabs">
+                <button class="tab-button active" onclick="switchTab('all')">All Tests</button>
+                <button class="tab-button" onclick="switchTab('running')">Running</button>
+                <button class="tab-button" onclick="switchTab('completed')">Completed</button>
+                <button class="tab-button" onclick="switchTab('failed')">Failed</button>
+            </div>
+
+            <div id="all" class="tab-content active">
+                <table class="results-table" id="allTestsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Test ID</th>
+                            <th>URL</th>
+                            <th>Duration</th>
+                            <th>Users</th>
+                            <th>Success Rate</th>
+                            <th>Avg Response (ms)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="allTestsBody">
+                    </tbody>
+                </table>
+                <div id="allTestsEmpty" class="empty-state">
+                    <p>No tests yet. Start one above!</p>
+                </div>
+            </div>
+
+            <div id="running" class="tab-content">
+                <table class="results-table" id="runningTestsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Test ID</th>
+                            <th>URL</th>
+                            <th>Duration</th>
+                            <th>Users</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runningTestsBody">
+                    </tbody>
+                </table>
+                <div id="runningTestsEmpty" class="empty-state">
+                    <p>No running tests</p>
+                </div>
+            </div>
+
+            <div id="completed" class="tab-content">
+                <table class="results-table" id="completedTestsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Test ID</th>
+                            <th>URL</th>
+                            <th>Duration</th>
+                            <th>Users</th>
+                            <th>Success Rate</th>
+                            <th>Avg Response (ms)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="completedTestsBody">
+                    </tbody>
+                </table>
+                <div id="completedTestsEmpty" class="empty-state">
+                    <p>No completed tests</p>
+                </div>
+            </div>
+
+            <div id="failed" class="tab-content">
+                <table class="results-table" id="failedTestsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Test ID</th>
+                            <th>URL</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="failedTestsBody">
+                    </tbody>
+                </table>
+                <div id="failedTestsEmpty" class="empty-state">
+                    <p>No failed tests</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8002';
+        let testStatusInterval = null;
+
+        // Form submission
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const url = document.getElementById('url').value;
+            const duration = parseInt(document.getElementById('duration').value);
+            const numUsers = parseInt(document.getElementById('numUsers').value);
+            const rampRate = parseFloat(document.getElementById('rampRate').value);
+            const reportName = document.getElementById('reportName').value || 'locust_report.html';
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner"></span>Starting...';
+
+            try {
+                const response = await fetch(`${API_BASE}/load-test`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url,
+                        duration,
+                        num_users: numUsers,
+                        ramp_rate: rampRate,
+                        html_report: reportName,
+                        csv_prefix: reportName.replace('.html', '')
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to start test');
+                }
+
+                const data = await response.json();
+                showAlert(`Test started! ID: ${data.test_id}`, 'success');
+
+                // Start polling for updates
+                startPolling(data.test_id);
+
+                // Refresh test list
+                setTimeout(refreshTests, 1000);
+
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Start Load Test';
+            }
+        });
+
+        async function startPolling(testId) {
+            let startTime = Date.now();
+
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/load-test/${testId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'completed' || data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        refreshTests();
+                        return;
+                    }
+
+                    // Update progress
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    const duration = data.request.duration;
+                    const progress = Math.min((elapsed / duration) * 100, 95);
+
+                    document.getElementById('progressBar').style.width = progress + '%';
+                    document.getElementById('elapsed').textContent = elapsed + 's';
+
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 2000);
+        }
+
+        async function refreshTests() {
+            try {
+                const response = await fetch(`${API_BASE}/tests`);
+                const data = await response.json();
+
+                updateStats(data);
+                displayTests(data.tests);
+
+            } catch (error) {
+                console.error('Error refreshing tests:', error);
+            }
+        }
+
+        function updateStats(data) {
+            const tests = data.tests;
+            const running = tests.filter(t => t.status === 'running').length;
+            const completed = tests.filter(t => t.status === 'completed').length;
+            const failed = tests.filter(t => t.status === 'failed').length;
+
+            document.getElementById('totalTests').textContent = tests.length;
+            document.getElementById('runningTests').textContent = running;
+            document.getElementById('completedTests').textContent = completed;
+            document.getElementById('failedTests').textContent = failed;
+
+            if (data.current_test) {
+                document.getElementById('currentTestInfo').style.display = 'block';
+            } else {
+                document.getElementById('currentTestInfo').style.display = 'none';
+            }
+        }
+
+        function displayTests(tests) {
+            const runningTests = tests.filter(t => t.status === 'running');
+            const completedTests = tests.filter(t => t.status === 'completed');
+            const failedTests = tests.filter(t => t.status === 'failed');
+
+            // All tests
+            if (tests.length === 0) {
+                document.getElementById('allTestsTable').style.display = 'none';
+                document.getElementById('allTestsEmpty').style.display = 'block';
+            } else {
+                document.getElementById('allTestsTable').style.display = 'table';
+                document.getElementById('allTestsEmpty').style.display = 'none';
+                document.getElementById('allTestsBody').innerHTML = tests.reverse().map(t => createTableRow(t, 'all')).join('');
+            }
+
+            // Running tests
+            if (runningTests.length === 0) {
+                document.getElementById('runningTestsTable').style.display = 'none';
+                document.getElementById('runningTestsEmpty').style.display = 'block';
+            } else {
+                document.getElementById('runningTestsTable').style.display = 'table';
+                document.getElementById('runningTestsEmpty').style.display = 'none';
+                document.getElementById('runningTestsBody').innerHTML = runningTests.map(t => createTableRow(t, 'running')).join('');
+            }
+
+            // Completed tests
+            if (completedTests.length === 0) {
+                document.getElementById('completedTestsTable').style.display = 'none';
+                document.getElementById('completedTestsEmpty').style.display = 'block';
+            } else {
+                document.getElementById('completedTestsTable').style.display = 'table';
+                document.getElementById('completedTestsEmpty').style.display = 'none';
+                document.getElementById('completedTestsBody').innerHTML = completedTests.reverse().map(t => createTableRow(t, 'completed')).join('');
+            }
+
+            // Failed tests
+            if (failedTests.length === 0) {
+                document.getElementById('failedTestsTable').style.display = 'none';
+                document.getElementById('failedTestsEmpty').style.display = 'block';
+            } else {
+                document.getElementById('failedTestsTable').style.display = 'table';
+                document.getElementById('failedTestsEmpty').style.display = 'none';
+                document.getElementById('failedTestsBody').innerHTML = failedTests.reverse().map(t => createTableRow(t, 'failed')).join('');
+            }
+        }
+
+        function createTableRow(test, view) {
+            const statusClass = test.status === 'completed' ? 'status-completed' :
+                test.status === 'failed' ? 'status-failed' : 'status-running';
+
+            const urlShort = test.url.length > 40 ? test.url.substring(0, 40) + '...' : test.url;
+
+            let row = `
+                <tr>
+                    <td><span class="status-badge ${statusClass}">${test.status.toUpperCase()}</span></td>
+                    <td><code style="background: #f0f0f0; padding: 3px 6px; border-radius: 3px; font-size: 0.85em;">${test.test_id}</code></td>
+                    <td title="${test.url}">${urlShort}</td>
+            `;
+
+            if (view === 'all' || view === 'completed') {
+                if (test.status === 'completed' && test.results) {
+                    row += `
+                        <td>${test.results.duration}s</td>
+                        <td>${test.results.num_users}</td>
+                        <td><span class="metrics-compact">${test.results.success_rate.toFixed(2)}%</span></td>
+                        <td><span class="metrics-compact">${test.results.avg_response_time.toFixed(2)}</span></td>
+                        <td class="action-cell">
+                            <button onclick="downloadReport('${test.test_id}')" style="background: #11998e;">📥 Report</button>
+                            <button onclick="downloadCSV('${test.test_id}')" style="background: #667eea;">📊 CSV</button>
+                        </td>
+                    `;
+                } else if (test.status === 'running') {
+                    row += `
+                        <td>In Progress</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td class="action-cell">-</td>
+                    `;
+                } else {
+                    row += `
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td class="action-cell">-</td>
+                    `;
+                }
+            } else if (view === 'running') {
+                row += `
+                    <td>In Progress</td>
+                    <td>${test.request ? test.request.duration : '-'}s</td>
+                    <td>${test.request ? test.request.num_users : '-'}</td>
+                `;
+            } else if (view === 'failed') {
+                row += `
+                    <td class="action-cell">
+                        <button onclick="refreshTests()" style="background: #667eea;">🔄 Retry</button>
+                    </td>
+                `;
+            }
+
+            row += '</tr>';
+            return row;
+        }
+
+        async function downloadReport(testId) {
+            window.location.href = `${API_BASE}/load-test/${testId}/report`;
+        }
+
+        async function downloadCSV(testId) {
+            window.location.href = `${API_BASE}/load-test/${testId}/csv`;
+        }
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert ${type}`;
+            alertDiv.textContent = message;
+
+            const testForm = document.getElementById('testForm');
+            testForm.parentElement.insertBefore(alertDiv, testForm);
+
+            setTimeout(() => alertDiv.remove(), 5000);
+        }
+
+        // Auto-refresh every 3 seconds
+        setInterval(refreshTests, 3000);
+
+        // Initial load
+        refreshTests();
+    </script>
+</body>
