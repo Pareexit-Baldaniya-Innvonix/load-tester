@@ -643,7 +643,8 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8002';
+        // Dynamic — works on any host/port since FastAPI serves this page
+        const API_BASE = window.location.origin;
         let testStatusInterval = null;
 
         // Form submission
@@ -677,16 +678,17 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to start test');
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || `Server error (${response.status})`);
                 }
 
                 const data = await response.json();
                 showAlert(`Test started! ID: ${data.test_id}`, 'success');
 
-                // Start polling for updates
-                startPolling(data.test_id);
+                document.getElementById('currentUrl').textContent = url;
+                startPolling(data.test_id, duration);
 
-                // Refresh test list
+                refreshTests();
                 setTimeout(refreshTests, 1000);
 
             } catch (error) {
@@ -697,28 +699,32 @@
             }
         });
 
-        async function startPolling(testId) {
-            let startTime = Date.now();
+        async function startPolling(testId, requestedDuration) {
+            const startTime = Date.now();
+            const duration = requestedDuration || 60;
 
-            const pollInterval = setInterval(async () => {
+            // Tick the elapsed timer every second — independent of the poll interval
+            // so the UI stays responsive even if a poll request takes time
+            let timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const progress = Math.min((elapsed / duration) * 100, 95);
+                document.getElementById('progressBar').style.width = progress + '%';
+                document.getElementById('elapsed').textContent = elapsed + 's';
+            }, 1000);
+
+            // Poll for status every 2 seconds
+            let pollInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`${API_BASE}/load-test/${testId}`);
                     const data = await response.json();
 
                     if (data.status === 'completed' || data.status === 'failed') {
                         clearInterval(pollInterval);
+                        clearInterval(timerInterval);
+                        document.getElementById('progressBar').style.width = '100%';
                         refreshTests();
                         return;
                     }
-
-                    // Update progress
-                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                    const duration = data.request.duration;
-                    const progress = Math.min((elapsed / duration) * 100, 95);
-
-                    document.getElementById('progressBar').style.width = progress + '%';
-                    document.getElementById('elapsed').textContent = elapsed + 's';
-
                 } catch (error) {
                     console.error('Polling error:', error);
                 }
@@ -751,8 +757,14 @@
 
             if (data.current_test) {
                 document.getElementById('currentTestInfo').style.display = 'block';
+                const runningTest = tests.find(t => t.test_id === data.current_test);
+                if (runningTest) {
+                    document.getElementById('currentUrl').textContent = runningTest.url;
+                }
             } else {
                 document.getElementById('currentTestInfo').style.display = 'none';
+                document.getElementById('progressBar').style.width = '0%';
+                document.getElementById('elapsed').textContent = '0s';
             }
         }
 
@@ -818,10 +830,10 @@
             if (view === 'all' || view === 'completed') {
                 if (test.status === 'completed' && test.results) {
                     row += `
-                        <td>${test.results.duration}s</td>
-                        <td>${test.results.num_users}</td>
-                        <td><span class="metrics-compact">${test.results.success_rate.toFixed(2)}%</span></td>
-                        <td><span class="metrics-compact">${test.results.avg_response_time.toFixed(2)}</span></td>
+                        <td>${test.duration != null ? test.duration + 's' : '-'}</td>
+                        <td>${test.num_users != null ? test.num_users : '-'}</td>
+                        <td><span class="metrics-compact">${test.results.success_rate != null ? test.results.success_rate.toFixed(2) + '%' : '-'}</span></td>
+                        <td><span class="metrics-compact">${test.results.avg_response_time != null ? test.results.avg_response_time.toFixed(2) : '-'}</span></td>
                         <td class="action-cell">
                             <button onclick="downloadReport('${test.test_id}')" style="background: #11998e;">📥 Report</button>
                             <button onclick="downloadCSV('${test.test_id}')" style="background: #667eea;">📊 CSV</button>
@@ -829,8 +841,8 @@
                     `;
                 } else if (test.status === 'running') {
                     row += `
-                        <td>In Progress</td>
-                        <td>-</td>
+                        <td>${test.duration != null ? test.duration + 's' : '-'}</td>
+                        <td>${test.num_users != null ? test.num_users : '-'}</td>
                         <td>-</td>
                         <td>-</td>
                         <td class="action-cell">-</td>
@@ -845,10 +857,10 @@
                     `;
                 }
             } else if (view === 'running') {
+                // 5-col header: Status|TestID|URL|Duration|Users — 3 fixed above, add 2 more
                 row += `
-                    <td>In Progress</td>
-                    <td>${test.request ? test.request.duration : '-'}s</td>
-                    <td>${test.request ? test.request.num_users : '-'}</td>
+                    <td>${test.duration != null ? test.duration + 's' : '-'}</td>
+                    <td>${test.num_users != null ? test.num_users : '-'}</td>
                 `;
             } else if (view === 'failed') {
                 row += `
@@ -862,12 +874,20 @@
             return row;
         }
 
-        async function downloadReport(testId) {
-            window.location.href = `${API_BASE}/load-test/${testId}/report`;
+        function downloadReport(testId) {
+            const link = document.createElement('a');
+            link.href = `${API_BASE}/load-test/${testId}/report`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
-        async function downloadCSV(testId) {
-            window.location.href = `${API_BASE}/load-test/${testId}/csv`;
+        function downloadCSV(testId) {
+            const link = document.createElement('a');
+            link.href = `${API_BASE}/load-test/${testId}/csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function switchTab(tabName) {
@@ -891,10 +911,12 @@
             setTimeout(() => alertDiv.remove(), 5000);
         }
 
-        // Auto-refresh every 3 seconds
-        setInterval(refreshTests, 3000);
+        // Auto-refresh every 0.5 seconds for responsive running tab
+        setInterval(refreshTests, 500);
 
         // Initial load
         refreshTests();
     </script>
 </body>
+
+</html>
