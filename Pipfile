@@ -11,6 +11,7 @@ tortoise-orm = "*"
 asyncpg = "*"
 locust = "*"
 aiofiles = "*"
+anyio = "*"
 
 [dev-packages]
 
