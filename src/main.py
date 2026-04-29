@@ -4,19 +4,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import os
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import asyncio
-from typing import Optional
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
+from typing import Optional
+
 import aiofiles
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
 # Local imports
 from .loaders.app_lifespan import app_lifespan
 from .models import LoadTest, TestMetrics
-
 
 app = FastAPI(title="Load Testing API", version="1.0.0", lifespan=app_lifespan)
 
@@ -36,6 +37,31 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 # In-memory store for test results
 test_results = {}
 current_test = None
+
+# Tracks the Future for each running test so we can cancel it
+running_futures: dict = {}
+
+_process_pool = ProcessPoolExecutor(max_workers=4)
+
+# cleanliness
+@app.on_event("startup")
+async def cleanup_stale_running_tests():
+    """
+    On every server startup, any test that is still marked 'running' in the DB
+    was interrupted by a crash or restart and will never complete.
+    Mark them all as 'failed' so the database stays consistent.
+    """
+    try:
+        stale = await LoadTest.filter(status="running").all()
+        for test in stale:
+            test.status = "failed"
+            test.error_message = "Server restarted while test was running"
+            test.completed_at = datetime.utcnow()
+            await test.save()
+        if stale:
+            pass
+    except Exception:
+        pass
 
 
 class LoadTestRequest(BaseModel):
@@ -60,6 +86,49 @@ class LoadTestResponse(BaseModel):
     num_users: int
     ramp_rate: float
     results: Optional[dict] = None
+
+
+def _run_load_test_in_process(
+    url: str,
+    duration: int,
+    num_users: int,
+    ramp_rate: float,
+    csv_prefix: str,
+    html_report: str,
+) -> dict:
+    """
+    Executed inside a worker process.  Imports are done here so that the
+    heavy Locust machinery is only loaded in the child, not in the main
+    FastAPI process.
+    """
+
+    from .load_testing import run_load_test
+
+    # run_load_test may be synchronous or async.  Handle both cases.
+    import asyncio as _asyncio
+
+    if asyncio.iscoroutinefunction(run_load_test):
+        return _asyncio.run(
+            run_load_test(
+                url=url,
+                duration=duration,
+                num_users=num_users,
+                ramp_rate=ramp_rate,
+                csv_prefix=csv_prefix,
+                html_report=html_report,
+                verbose=False,
+            )
+        )
+    else:
+        return run_load_test(
+            url=url,
+            duration=duration,
+            num_users=num_users,
+            ramp_rate=ramp_rate,
+            csv_prefix=csv_prefix,
+            html_report=html_report,
+            verbose=False,
+        )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -109,26 +178,26 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
 
     global current_test
 
-    # Check if a test is already running
-    if current_test is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="A test is already running. Wait for it to complete.",
-        )
-
     test_id = f"test_{int(asyncio.get_event_loop().time())}"
     current_test = test_id
 
-    # Store test info
+    # Store initial test info
     test_results[test_id] = {
         "status": "running",
         "request": request.dict(),
         "results": None,
+        "started_at": datetime.utcnow().isoformat() + "Z",
     }
 
     # Run test in background
     async def run_test():
+        global current_test
         db_test = None
+
+        reports_dir = os.getenv("REPORTS_DIR", "./reports")
+        unique_html_report = f"locust_report_{test_id}.html"
+        unique_csv_prefix = f"locust_results_{test_id}"
+
         try:
             # Create database record
             db_test = await LoadTest.create(
@@ -141,34 +210,34 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
                 started_at=datetime.utcnow(),
             )
 
-            # Generate unique filenames based on test_id
-            reports_dir = os.getenv("REPORTS_DIR", "./reports")
-            unique_html_report = f"locust_report_{test_id}.html"
-            unique_csv_prefix = f"locust_results_{test_id}"
-
-            from .load_testing import run_load_test
-
-            results = run_load_test(
-                url=request.url,
-                duration=request.duration,
-                num_users=request.num_users,
-                ramp_rate=request.ramp_rate,
-                csv_prefix=unique_csv_prefix,
-                html_report=unique_html_report,
-                verbose=False,  # Don't print when running via API
+            loop = asyncio.get_event_loop()
+            future = loop.run_in_executor(
+                _process_pool,
+                _run_load_test_in_process,
+                request.url,
+                request.duration,
+                request.num_users,
+                request.ramp_rate,
+                unique_csv_prefix,
+                unique_html_report,
             )
+            running_futures[test_id] = future
+            results: dict = await future
 
-            test_results[test_id]["status"] = "completed"
-            test_results[test_id]["results"] = results
-
-            # Store the actual file paths used (in reports directory)
             html_path = str(Path(reports_dir) / unique_html_report)
             csv_path = str(Path(reports_dir) / f"{unique_csv_prefix}_stats.csv")
 
-            test_results[test_id]["html_file"] = html_path
-            test_results[test_id]["csv_file"] = csv_path
+            # Update in-memory store
+            test_results[test_id].update(
+                {
+                    "status": "completed",
+                    "results": results,
+                    "html_file": html_path,
+                    "csv_file": csv_path,
+                }
+            )
 
-            # Update database record with results
+            # Persist results to DB
             db_test.status = "completed"
             db_test.total_requests = int(results["total_requests"])
             db_test.total_failures = int(results["total_failures"])
@@ -206,10 +275,10 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
                         created_at=datetime.utcnow(),
                     )
                 except Exception:
-                    pass  # Silently fail if we can't create the record
+                    pass  # Silently ignore DB errors at this stage
 
         finally:
-            global current_test
+            running_futures.pop(test_id, None)
             current_test = None
 
     background_tasks.add_task(run_test)
@@ -303,6 +372,42 @@ async def download_csv(test_id: str):
     )
 
 
+@app.delete("/load-test/{test_id}/stop")
+async def stop_load_test(test_id: str):
+    """Cancel a running load test."""
+    if test_id not in test_results:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    if test_results[test_id]["status"] != "running":
+        return {"message": f"Test {test_id} is not running", "test_id": test_id}
+
+    # Cancel the future — this works for executor futures in Python 3.9+
+    future = running_futures.get(test_id)
+    if future:
+        future.cancel()
+        running_futures.pop(test_id, None)
+
+    # Mark as stopped in memory immediately
+    test_results[test_id]["status"] = "failed"
+    test_results[test_id]["error"] = "Stopped by user"
+
+    global current_test
+    if current_test == test_id:
+        current_test = None
+
+    # Also update the database record so it doesn't stay stuck as "running"
+    try:
+        db_test = await LoadTest.get(test_id=test_id)
+        db_test.status = "failed"
+        db_test.error_message = "Stopped by user"
+        db_test.completed_at = datetime.utcnow()
+        await db_test.save()
+    except Exception:
+        pass  # Silently ignore if the DB record doesn't exist yet
+
+    return {"message": f"Test {test_id} stopped", "test_id": test_id}
+
+
 @app.get("/tests")
 async def list_tests():
     """List all tests and their status."""
@@ -318,6 +423,7 @@ async def list_tests():
                 "ramp_rate": test["request"].get("ramp_rate"),
                 "results": test.get("results"),
                 "error": test.get("error"),
+                "started_at": test.get("started_at"),
             }
             for test_id, test in test_results.items()
         ],
