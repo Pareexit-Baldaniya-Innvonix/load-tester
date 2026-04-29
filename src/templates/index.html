@@ -452,6 +452,23 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .running-test-card {
+            margin-top: 15px;
+        }
+
+        .running-test-card:first-child {
+            margin-top: 20px;
+        }
+
+        .running-tests-header {
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 5px;
+            font-size: 1em;
+            font-weight: 600;
         }
 
         @keyframes spin {
@@ -532,19 +549,7 @@
                     </div>
                 </div>
 
-                <div id="currentTestInfo" style="display: none;">
-                    <h3 style="color: #333; margin-top: 20px; margin-bottom: 10px;">Current Test</h3>
-                    <div class="test-item running">
-                        <div class="test-url" id="currentUrl"></div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progressBar" style="width: 0%;"></div>
-                        </div>
-                        <div class="detail-item" style="margin-top: 10px;">
-                            <div class="detail-label">Elapsed Time</div>
-                            <div class="detail-value"><span class="spinner"></span><span id="elapsed">0s</span></div>
-                        </div>
-                    </div>
-                </div>
+                <div id="runningTestsPanel"></div>
             </div>
         </div>
 
@@ -553,7 +558,7 @@
             <h2>📋 Test History</h2>
 
             <div class="tabs">
-                <button class="tab-button active" onclick="switchTab('all')">All Tests</button>
+                <button class="tab-button active" onclick="switchTab('all', event)">All Tests</button>
                 <button class="tab-button" onclick="switchTab('running')">Running</button>
                 <button class="tab-button" onclick="switchTab('completed')">Completed</button>
                 <button class="tab-button" onclick="switchTab('failed')">Failed</button>
@@ -685,34 +690,23 @@
                 const data = await response.json();
                 showAlert(`Test started! ID: ${data.test_id}`, 'success');
 
-                document.getElementById('currentUrl').textContent = url;
-                startPolling(data.test_id, duration);
+                // multiple tests can run in parallel
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Start Load Test';
 
+                startPolling(data.test_id);
                 refreshTests();
                 setTimeout(refreshTests, 1000);
 
             } catch (error) {
                 showAlert(`Error: ${error.message}`, 'error');
-            } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Start Load Test';
             }
         });
 
-        async function startPolling(testId, requestedDuration) {
-            const startTime = Date.now();
-            const duration = requestedDuration || 60;
-
-            // Tick the elapsed timer every second — independent of the poll interval
-            // so the UI stays responsive even if a poll request takes time
-            let timerInterval = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                const progress = Math.min((elapsed / duration) * 100, 95);
-                document.getElementById('progressBar').style.width = progress + '%';
-                document.getElementById('elapsed').textContent = elapsed + 's';
-            }, 1000);
-
-            // Poll for status every 2 seconds
+        async function startPolling(testId) {
+            // Poll every 2s until this specific test finishes, then refresh the UI
             let pollInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`${API_BASE}/load-test/${testId}`);
@@ -720,10 +714,10 @@
 
                     if (data.status === 'completed' || data.status === 'failed') {
                         clearInterval(pollInterval);
-                        clearInterval(timerInterval);
-                        document.getElementById('progressBar').style.width = '100%';
+                        // Set the card's progress bar to 100% before refreshTests removes it
+                        const bar = document.getElementById('prog-' + testId);
+                        if (bar) bar.style.width = '100%';
                         refreshTests();
-                        return;
                     }
                 } catch (error) {
                     console.error('Polling error:', error);
@@ -744,28 +738,99 @@
             }
         }
 
+        // Tracks per-test elapsed timer intervals: { testId -> intervalId }
+        const runningTimers = {};
+
         function updateStats(data) {
             const tests = data.tests;
-            const running = tests.filter(t => t.status === 'running').length;
+            const runningTests = tests.filter(t => t.status === 'running');
             const completed = tests.filter(t => t.status === 'completed').length;
             const failed = tests.filter(t => t.status === 'failed').length;
 
             document.getElementById('totalTests').textContent = tests.length;
-            document.getElementById('runningTests').textContent = running;
+            document.getElementById('runningTests').textContent = runningTests.length;
             document.getElementById('completedTests').textContent = completed;
             document.getElementById('failedTests').textContent = failed;
 
-            if (data.current_test) {
-                document.getElementById('currentTestInfo').style.display = 'block';
-                const runningTest = tests.find(t => t.test_id === data.current_test);
-                if (runningTest) {
-                    document.getElementById('currentUrl').textContent = runningTest.url;
-                }
-            } else {
-                document.getElementById('currentTestInfo').style.display = 'none';
-                document.getElementById('progressBar').style.width = '0%';
-                document.getElementById('elapsed').textContent = '0s';
+            const panel = document.getElementById('runningTestsPanel');
+
+            if (runningTests.length === 0) {
+                // Clear all timers and the panel
+                Object.values(runningTimers).forEach(clearInterval);
+                Object.keys(runningTimers).forEach(k => delete runningTimers[k]);
+                panel.innerHTML = '';
+                return;
             }
+
+            // Show header once
+            if (!panel.querySelector('.running-tests-header')) {
+                const header = document.createElement('h3');
+                header.className = 'running-tests-header';
+                header.textContent = 'Running Tests';
+                panel.prepend(header);
+            }
+
+            // Add a card for each running test that does not already have one
+            runningTests.forEach(test => {
+                const cardId = 'rtcard-' + test.test_id;
+                if (!document.getElementById(cardId)) {
+                    const card = document.createElement('div');
+                    card.id = cardId;
+                    card.className = 'test-item running running-test-card';
+                    card.innerHTML = `
+                        <div class="test-url" style="margin-bottom:8px; font-size:0.9em;">${test.url}</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="prog-${test.test_id}" style="width:0%"></div>
+                        </div>
+                        <div class="detail-item" style="margin-top:10px;">
+                            <div class="detail-label">Elapsed Time</div>
+                            <div class="detail-value">
+                                <span class="spinner"></span>
+                                <span id="elapsed-${test.test_id}">0s</span>
+                            </div>
+                        </div>
+                    `;
+                    panel.appendChild(card);
+
+                    // Use test.started_at from the API so that a page refresh resumes
+                    // the elapsed counter from the real start — not reset to 0.
+                    const startTime = test.started_at
+                        ? new Date(test.started_at).getTime()
+                        : Date.now();
+                    const duration = test.duration || 60;
+
+                    // Paint the correct elapsed immediately (important on page refresh)
+                    const initElapsed = Math.floor((Date.now() - startTime) / 1000);
+                    const initEl = document.getElementById('elapsed-' + test.test_id);
+                    const initBar = document.getElementById('prog-' + test.test_id);
+                    if (initEl) initEl.textContent = Math.max(0, initElapsed) + 's';
+                    if (initBar) initBar.style.width = Math.min((Math.max(0, initElapsed) / duration) * 100, 95) + '%';
+
+                    runningTimers[test.test_id] = setInterval(() => {
+                        const el = document.getElementById('elapsed-' + test.test_id);
+                        const bar = document.getElementById('prog-' + test.test_id);
+                        if (!el) { clearInterval(runningTimers[test.test_id]); return; }
+                        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                        el.textContent = elapsed + 's';
+                        if (bar) bar.style.width = Math.min((elapsed / duration) * 100, 95) + '%';
+                    }, 1000);
+                }
+            });
+
+            // Remove cards for tests that are no longer running
+            panel.querySelectorAll('.running-test-card').forEach(card => {
+                const tid = card.id.replace('rtcard-', '');
+                const stillRunning = runningTests.find(t => t.test_id === tid);
+                if (!stillRunning) {
+                    clearInterval(runningTimers[tid]);
+                    delete runningTimers[tid];
+                    card.remove();
+                    // Remove header too if panel is now empty of cards
+                    if (!panel.querySelector('.running-test-card')) {
+                        panel.innerHTML = '';
+                    }
+                }
+            });
         }
 
         function displayTests(tests) {
@@ -890,7 +955,7 @@
             document.body.removeChild(link);
         }
 
-        function switchTab(tabName) {
+        function switchTab(tabName, event) {
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
@@ -911,8 +976,8 @@
             setTimeout(() => alertDiv.remove(), 5000);
         }
 
-        // Auto-refresh every 0.5 seconds for responsive running tab
-        setInterval(refreshTests, 500);
+        // Auto-refresh every 3 seconds
+        setInterval(refreshTests, 3000);
 
         // Initial load
         refreshTests();
