@@ -104,9 +104,6 @@ def _run_load_test_in_process(
 
     from .load_testing import run_load_test
 
-    # run_load_test may be synchronous or async.  Handle both cases.
-    import asyncio as _asyncio
-
     return run_load_test(
         url=url,
         duration=duration,
