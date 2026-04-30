@@ -41,7 +41,7 @@ current_test = None
 # Tracks the Future for each running test so we can cancel it
 running_futures: dict = {}
 
-_process_pool = ProcessPoolExecutor(max_workers=4)
+process_pool = ProcessPoolExecutor(max_workers=4)
 
 # cleanliness
 @app.on_event("startup")
@@ -107,28 +107,15 @@ def _run_load_test_in_process(
     # run_load_test may be synchronous or async.  Handle both cases.
     import asyncio as _asyncio
 
-    if asyncio.iscoroutinefunction(run_load_test):
-        return _asyncio.run(
-            run_load_test(
-                url=url,
-                duration=duration,
-                num_users=num_users,
-                ramp_rate=ramp_rate,
-                csv_prefix=csv_prefix,
-                html_report=html_report,
-                verbose=False,
-            )
-        )
-    else:
-        return run_load_test(
-            url=url,
-            duration=duration,
-            num_users=num_users,
-            ramp_rate=ramp_rate,
-            csv_prefix=csv_prefix,
-            html_report=html_report,
-            verbose=False,
-        )
+    return run_load_test(
+        url=url,
+        duration=duration,
+        num_users=num_users,
+        ramp_rate=ramp_rate,
+        csv_prefix=csv_prefix,
+        html_report=html_report,
+        verbose=False,
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -212,7 +199,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
 
             loop = asyncio.get_event_loop()
             future = loop.run_in_executor(
-                _process_pool,
+                process_pool,
                 _run_load_test_in_process,
                 request.url,
                 request.duration,
