@@ -88,7 +88,7 @@ class LoadTestResponse(BaseModel):
     results: Optional[dict] = None
 
 
-def _run_load_test_in_process(
+def run_load_test_in_process(
     url: str,
     duration: int,
     num_users: int,
@@ -197,7 +197,7 @@ async def start_load_test(request: LoadTestRequest, background_tasks: Background
             loop = asyncio.get_event_loop()
             future = loop.run_in_executor(
                 process_pool,
-                _run_load_test_in_process,
+                run_load_test_in_process,
                 request.url,
                 request.duration,
                 request.num_users,
