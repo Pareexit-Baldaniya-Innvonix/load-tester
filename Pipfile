@@ -12,6 +12,7 @@ asyncpg = "*"
 locust = "*"
 aiofiles = "*"
 anyio = "*"
+python-json-logger = "*"
 
 [dev-packages]
 
